@@ -1,1 +1,124 @@
- this is a second file
+import { Component, Inject, OnDestroy, OnInit } from '@angular/core';
+import { MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { SelectorApiService } from '../services/selector.api.service';
+import { SelectorDataService } from "../services/selector.data.service";
+import { Observable, of, Subject } from "rxjs";
+import { finalize, map, takeUntil } from "rxjs/operators";
+import { AuthService } from "../../../services/auth.service";
+import { SelectorQuery } from "../../../models/selector-query.model";
+
+declare var CodeMirror;
+
+@Component({
+    selector: 'selector-query-editor',
+    templateUrl: './selector-query-viewer.component.html',
+    styleUrls: ['./selector-query-viewer.component.css'],
+    providers: [
+        Subject
+    ]
+})
+
+export class SelectorQueryViewerComponent implements OnInit, OnDestroy {
+    constructor(
+        private unsubscribeTrigger: Subject<void>,
+        @Inject(MAT_DIALOG_DATA) public data: any,
+        private apiService: SelectorApiService,
+        private dataService: SelectorDataService,
+        private authService: AuthService
+    ) {
+    }
+
+    queries: SelectorQuery[] = [];
+    selectedQuery: SelectorQuery;
+    error: string;
+    variableFormat: string[] = ['Free Text', 'Pre-Defined', 'Custom'];
+
+    filteredQueries: Observable<any[]>;
+
+    private editor;
+
+    ngOnInit() {
+        this.selectedQuery = new SelectorQuery();
+        this.queries = this.data.queries;
+        this.filteredQueries = of(this.queries);
+
+        this.initEditor();
+
+        this.dataService.onViewableQueryClicked$.pipe(takeUntil(this.unsubscribeTrigger))
+            .subscribe(query => {
+                if(query) {
+                    this.onQuerySelected(query);
+                }
+            });
+
+        if(this.data.selectedQuery) {
+            this.onQuerySelected(this.data.selectedQuery);
+        }
+    }
+
+    ngOnDestroy() {
+        this.unsubscribeTrigger.next();
+        this.unsubscribeTrigger.complete();
+    }
+
+    filterQuery() {
+        this.filteredQueries = of(this.queries).pipe(
+            map(_ => this._filterQuery())
+        )
+
+this.filteredQueries =  of(this.queries).map( function (query) {
+         return {
+            value: query.toLowerCase(),
+            display: query
+         };
+      });
+    }
+
+    onQuerySelected(query: SelectorQuery) {
+        let selectedQueryName = query.name.trim();
+        let selectedQueryLdap = query.ldapEntity.trim();
+
+        for(let i = 0; i < this.queries.length; i++) {
+            if(this.queries[i].name === selectedQueryName && this.queries[i].ldapEntity === selectedQueryLdap) {
+                this.selectedQuery.parseSelectorQuery(this.queries[i]);
+                break;
+            }
+        }
+        this.filterQuery();
+
+        console.log("Query: ", this.selectedQuery);
+
+        if(this.selectedQuery.statement.endsWith("...")) {
+            this.authService.loading.next('Loading query statement ...');
+            this.apiService.getViewableQuery(this.selectedQuery.ldapEntity, this.selectedQuery.name).pipe(
+                finalize(() => {
+                    this.authService.loading.next(false);
+                })).subscribe(result => {
+                this.selectedQuery.statement = result.statement;
+                this.editor.setValue(this.selectedQuery.statement);
+            });
+        } else {
+            this.editor.setValue(this.selectedQuery.statement);
+        }
+    }
+
+    private initEditor() {
+        this.editor = CodeMirror.fromTextArea(document.getElementById('js-schedule-editor'), {
+            readOnly: true,
+            mode: 'text/x-mysql',
+            smartIndent: true,
+            lineNumbers: true,
+            lineWrapping: true,
+            viewportMargin: 5,
+            styleSelectedText: true,
+            gutters: ["CodeMirror-linenumbers"]
+        });
+
+        this.editor.setSize(null, 200);
+    }
+
+    private _filterQuery(): any[] {
+        let filterValue = this.selectedQuery.name.toLowerCase();
+        return this.queries.filter(query => query.name.toLowerCase().includes(filterValue));
+    }
+}
