@@ -1,1 +1,7 @@
- this is a second file
+  Query Tool-Used for data profiling & analysis this includes features such as Scheduler, selector(using pre-defined queries), visualizer(assist in query construction)
+
+     Data Drive-sharing query outputs & data between users
+
+     Data comparator- data comparison and regression
+
+     Virtualizer- create/access limited or unavailable services in a simulated, virtual environment
